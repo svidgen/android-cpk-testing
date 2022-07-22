@@ -73,7 +73,10 @@ class MainActivity : AppCompatActivity() {
         return suspendCoroutine { continuation ->
             Amplify.DataStore.query(
                 Project::class.java,
-                Where.identifier(Project::class.java, "some random string"),
+                Where.identifier(
+                    Project::class.java,
+                    Project.ProjectIdentifier(projectId, name)
+                ),
                 { continuation.resumeWith(Result.success(it.asSequence().first())) },
                 { Log.e("Tutorial", "couldn't get the thing", it)}
             )
@@ -97,13 +100,22 @@ class MainActivity : AppCompatActivity() {
          * the `async {  }` wrapper and subsequent `await()` are very unnecessary
          * for my use-case here. i'm just leaving them in for demonstrative purposes.
          */
-        val deferredSavedProject = async { save(Project.Builder()
-            .projectId(UUID.randomUUID().toString())
-            .name("some project name")
-            .build()
+        val deferredSavedProject = async { save(
+            Project.builder()
+                 .projectId(UUID.randomUUID().toString())
+                 .name("some project name")
+                .build()
         )}
         val savedProject = deferredSavedProject.await();
         Log.i("Tutorial", "awaited saved project ${savedProject.projectId} -> ${savedProject.name}")
+
+        val savedTeam = save(Team.builder()
+            .teamId(UUID.randomUUID().toString())
+            .name("some team name")
+            .project(savedProject)
+            .build()
+        )
+        Log.i("Tutorial", "awaited saved team ${savedTeam.teamId} -> ${savedTeam.name}")
 
         /**
          * when we're dealing with suspended functions (deferred values), we can
