@@ -1,11 +1,13 @@
 package com.example.androidcpktesting
 
+import android.app.DownloadManager
 import androidx.appcompat.app.AppCompatActivity
 import android.os.Bundle
 import android.util.Log
 import com.amplifyframework.AmplifyException
 import com.amplifyframework.core.Amplify
 import com.amplifyframework.core.model.Model
+import com.amplifyframework.core.model.query.QueryOptions
 import com.amplifyframework.datastore.AWSDataStorePlugin
 import com.amplifyframework.core.model.query.Where
 import com.amplifyframework.datastore.DataStoreConfiguration
@@ -17,6 +19,8 @@ import kotlin.coroutines.suspendCoroutine
 
 import com.amplifyframework.datastore.generated.model.*
 import java.util.*
+import kotlin.coroutines.resume
+import kotlin.reflect.KSuspendFunction0
 
 class MainActivity : AppCompatActivity() {
 
@@ -38,7 +42,7 @@ class MainActivity : AppCompatActivity() {
             val x = Amplify.DataStore.save(item,
                 {
                     Log.i("Tutorial", "saved item: ${item.toString()}")
-                    continuation.resumeWith(Result.success(it.item()))
+                    continuation.resume(it.item())
                 },
                 {
                     Log.e("Tutorial", "Failed to save item: ${item.toString()}")
@@ -49,51 +53,70 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
-    private suspend fun <T>getById(model: Class<T>, id: String): T where T : Model {
-        // val field = model::class.members.find { it -> it.name == "abc"}
+    private suspend fun <T>get(model: Class<T>, options: QueryOptions): T? where T : Model {
         return suspendCoroutine { continuation ->
-            Amplify.DataStore.query(model, Where.id(id),
-                { continuation.resumeWith(Result.success(it.asSequence().first())) },
-                { Log.e("Tutorial", "couldn't get the thing")}
+            Amplify.DataStore.query(model, options,
+                {
+                    val items = it.asSequence().toList()
+                    if (items.size == 1) {
+                        continuation.resume(items.first())
+                    } else if (items.isEmpty()) {
+                        continuation.resume(null)
+                    } else {
+                        continuation.resumeWithException(Error("Multiple items found for get()"))
+                    }
+                },
+                { Log.e("Tutorial", "get() couldn't get the thing", it)}
             )
         }
     }
 
-    private suspend fun <T>getByPk(model: Class<T>, pk: String): T where T : Model {
+    private suspend fun <T>list(model: Class<T>, options: QueryOptions? = null): List<T> where T : Model {
         // val field = model::class.members.find { it -> it.name == "abc"}
-        return suspendCoroutine { continuation ->
-            Amplify.DataStore.query(model, Where.identifier(model, pk),
-                { continuation.resumeWith(Result.success(it.asSequence().first())) },
-                { Log.e("Tutorial", "couldn't get the thing")}
-            )
-        }
-    }
-
-    private suspend fun getProjectByPk(projectId: String, name: String): Project {
         return suspendCoroutine { continuation ->
             Amplify.DataStore.query(
+                model,
+                options ?: Where.matchesAll(),
+                { continuation.resume(it.asSequence().toList()) },
+                { Log.e("Tutorial", "couldn't get the thing 6")}
+            )
+        }
+    }
+
+    private suspend fun getProjectByPk(projectId: String, name: String): Project? {
+        return get(
+            Project::class.java,
+            Where.identifier(
                 Project::class.java,
-                Where.identifier(
-                    Project::class.java,
-                    Project.ProjectIdentifier(projectId, name)
-                ),
-                { continuation.resumeWith(Result.success(it.asSequence().first())) },
-                { Log.e("Tutorial", "couldn't get the thing", it)}
+                Project.ProjectIdentifier(projectId, name)
             )
-        }
+        )
     }
 
-    private suspend fun <T>listAll(model: Class<T>): List<T> where T : Model {
-        // val field = model::class.members.find { it -> it.name == "abc"}
+    private suspend fun getTeamByPk(teamId: String, name: String): Team? {
+        return get(
+            Team::class.java,
+            Where.identifier(
+                Team::class.java,
+                Team.TeamIdentifier(teamId, name)
+            )
+        )
+    }
+
+    private suspend fun getTeamByProject(projectId: String, name: String): Team {
         return suspendCoroutine { continuation ->
-            Amplify.DataStore.query(model,
-                { continuation.resumeWith(Result.success(it.asSequence().toList())) },
-                { Log.e("Tutorial", "couldn't get the thing")}
+            Amplify.DataStore.query(
+                Team::class.java,
+                Where.matches(Team.PROJECT.eq(
+                    Project.builder().projectId(projectId).name(name).build()
+                )),
+                { continuation.resumeWith(Result.success(it.asSequence().first())) },
+                { Log.e("Tutorial", "couldn't get the thing 5", it)}
             )
         }
     }
 
-    private suspend fun testProjects() = coroutineScope {
+    suspend fun testProjects() = coroutineScope {
         Log.i("Tutorial", "inside testNotes")
 
         /**
@@ -102,12 +125,14 @@ class MainActivity : AppCompatActivity() {
          */
         val deferredSavedProject = async { save(
             Project.builder()
-                 .projectId(UUID.randomUUID().toString())
-                 .name("some project name")
+                .projectId(UUID.randomUUID().toString())
+                .name("some project name")
+                .projectTeamName("team name. wat?")
+//                .projectTeamTeamId(UUID.randomUUID().toString())
                 .build()
         )}
         val savedProject = deferredSavedProject.await();
-        Log.i("Tutorial", "awaited saved project ${savedProject.projectId} -> ${savedProject.name}")
+        Log.i("Tutorial", "saved project full ${savedProject}")
 
         val savedTeam = save(Team.builder()
             .teamId(UUID.randomUUID().toString())
@@ -115,25 +140,113 @@ class MainActivity : AppCompatActivity() {
             .project(savedProject)
             .build()
         )
-        Log.i("Tutorial", "awaited saved team ${savedTeam.teamId} -> ${savedTeam.name}")
+        val retrievedTeam = getTeamByPk(savedTeam.teamId, savedTeam.name);
+        Log.i("Tutorial", "retrieved team ${retrievedTeam}")
 
-        /**
-         * when we're dealing with suspended functions (deferred values), we can
-         * just call them like normal functions in the scope of a coroutine.
-         */
-//        val retrievedProject = getByPk(
-//            Project::class.java,
-//            savedProject.projectId
-//        )
-//        Log.i("Tutorial", "awaited retrieved note ${retrievedProject.projectId} -> ${retrievedProject.name}")
+//        // given savedProject, can i get team?
+//        val teamByProject = getTeamByProject(savedProject.projectId, savedProject.name)
+//        Log.i("Tutorial", "retrieved teambyproject ${teamByProject}")
 
         val retrievedProject = getProjectByPk(savedProject.projectId, savedProject.name)
-        Log.i("Tutorial", "awaited retrieved project ${retrievedProject.projectId} -> ${retrievedProject.name}")
 
-        val allProjects = listAll(Project::class.java)
+        Log.i("Tutorial", "retrieved project ${retrievedProject}")
+        Log.i("Tutorial", "project team ${retrievedProject?.team}")
+
+        val allProjects = list(Project::class.java)
         for (p in allProjects) {
-            Log.i("Tutorial", "listAll project ${p.projectId} -> ${p.name}")
+            Log.i("Tutorial", "listAll project ${p}")
         }
+    }
+
+    private suspend fun clear(): Boolean {
+        return suspendCoroutine { continuation ->
+            Amplify.DataStore.clear(
+                {
+                    Log.i("Tutorial", "DataStore cleared")
+                    continuation.resume(true)
+                },
+                {
+                    Log.e("Tutorial", "b")
+                    continuation.resumeWithException(it)
+                }
+            )
+        }
+    }
+
+    private suspend fun test(expectation: String, action: KSuspendFunction0<Unit>) = coroutineScope {
+        try {
+            Log.i("Expectation", "MET    : $expectation")
+        } catch (error: Error) {
+            Log.e("Expectation", "FAILED : $expectation", error)
+        } finally {
+            clear()
+        }
+    }
+
+    suspend fun canCreate() = coroutineScope {
+        clear()
+
+        val project = save(
+            Project.builder()
+            .projectId(UUID.randomUUID().toString())
+            .name("a project name")
+            .build()
+        )
+//        expect("project to have ")
+
+        val team = save(
+            Team.builder()
+                .teamId(UUID.randomUUID().toString())
+                .name("a team name")
+                .project(project)
+                .build()
+        )
+
+        // assert(true) { "bwahaha" }
+    }
+
+    suspend fun canCreateTeamWithoutProject() = coroutineScope {
+        clear()
+
+        val project = save(
+            Project.builder()
+                .projectId(UUID.randomUUID().toString())
+                .name("a project name")
+                // .team("") // <-- it doesn't let me do this!
+                .build()
+        )
+    }
+
+    suspend fun canCreateProjectWithTeam() = coroutineScope {
+
+    }
+
+    suspend fun canQueryAll() = coroutineScope {
+        clear()
+    }
+
+    suspend fun canQueryById() = coroutineScope {
+        clear()
+    }
+
+    suspend fun canQueryByPredicate() = coroutineScope {
+        clear()
+    }
+
+    suspend fun canUpdate() = coroutineScope {
+        clear()
+    }
+
+    suspend fun canDelete() = coroutineScope {
+        clear()
+    }
+
+    suspend fun canObserve() = coroutineScope {
+        clear()
+    }
+
+    suspend fun canObserveQuery() = coroutineScope {
+        clear()
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -161,6 +274,14 @@ class MainActivity : AppCompatActivity() {
         GlobalScope.launch(Dispatchers.Default) {
             Log.i("Tutorial", "at the top of the launch")
             testProjects()
+//            test("adsf", ::canCreate)
+//            testQueryAll();
+//            testQueryById();
+//            testUpdate();
+//            testDelete();
+//            testQueryByPredicate();
+//            testObserve();
+//            testObserveQuery();
             Log.i("Tutorial", "at the bottom of the launch")
         }
 

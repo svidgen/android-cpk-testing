@@ -1,5 +1,6 @@
 package com.example.androidcpktesting
 
+import android.util.Log
 import androidx.test.platform.app.InstrumentationRegistry
 import androidx.test.ext.junit.runners.AndroidJUnit4
 
@@ -20,5 +21,6 @@ class ExampleInstrumentedTest {
         // Context of the app under test.
         val appContext = InstrumentationRegistry.getInstrumentation().targetContext
         assertEquals("com.example.androidcpktesting", appContext.packageName)
+        Log.i("TestRunner", "output from the test runner")
     }
 }
