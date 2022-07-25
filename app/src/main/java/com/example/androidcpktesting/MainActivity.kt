@@ -7,6 +7,7 @@ import android.util.Log
 import com.amplifyframework.AmplifyException
 import com.amplifyframework.core.Action
 import com.amplifyframework.core.Amplify
+import com.amplifyframework.core.async.Cancelable
 import com.amplifyframework.core.model.Model
 import com.amplifyframework.core.model.query.QueryOptions
 import com.amplifyframework.datastore.AWSDataStorePlugin
@@ -20,6 +21,8 @@ import kotlin.coroutines.resumeWithException
 import kotlin.coroutines.suspendCoroutine
 
 import com.amplifyframework.datastore.generated.model.*
+import io.reactivex.rxjava3.functions.Cancellable
+import java.lang.ref.Reference
 import java.lang.reflect.TypeVariable
 import java.util.*
 import kotlin.coroutines.resume
@@ -27,13 +30,27 @@ import kotlin.reflect.KSuspendFunction0
 
 class MainActivity : AppCompatActivity() {
 
-    private suspend fun test(story: String, action: suspend () -> Unit) {
-        Log.i("Story", "PENDING : $story")
+    /**
+     * Executes a given story and logs output about whether the case succeeded or failed.
+     *
+     * @param story A description of the use-case.
+     * @param action The code to execute to stress the testing story.
+     * @param fastFollow Whether the test is expected to pass *right now*. "Fast follow"
+     * essentially indicates that the failure is known, so the failure doesn't appear in
+     * the logs with a full a trace. These failures are also marked as "KNOWN" errors
+     * instead of "FAILED" stories.
+     */
+    private suspend fun test(story: String, action: suspend () -> Unit, fastFollow: Boolean = false) {
+//        Log.i("Story", "PENDING : $story")
         try {
             action()
             Log.i("Story", "MET     : $story")
         } catch (error: Error) {
-            Log.e("Story", "FAILED  : $story", error)
+            if (fastFollow) {
+                Log.e("Story", "KNOWN   : $story")
+            } else {
+                Log.e("Story", "FAILED  : $story", error)
+            }
         } finally {
             // clear()
         }
@@ -146,6 +163,17 @@ class MainActivity : AppCompatActivity() {
             Amplify.DataStore.delete(
                 item,
                 { continuation.resume(it.item()) },
+                { Log.e("Tutorial", "delete() failure", it)}
+            )
+        }
+    }
+
+    private suspend fun <T>delete(model: Class<T>, predicate: QueryPredicate): Unit where T : Model {
+        return suspendCoroutine { continuation ->
+            Amplify.DataStore.delete(
+                model,
+                predicate,
+                { continuation.resume(Unit) },
                 { Log.e("Tutorial", "delete() failure", it)}
             )
         }
@@ -359,21 +387,261 @@ class MainActivity : AppCompatActivity() {
     }
 
     suspend fun canQueryAll() {
+        // used to isolate entries from this test run.
+        val isolationKey = UUID.randomUUID().toString();
+
+        val itemsToCreate = 5;
+
+        for (i in 1..itemsToCreate) {
+            save(Project.builder()
+                .projectId(UUID.randomUUID().toString())
+                .name("project canQueryAll $i ($isolationKey)")
+                .build()
+            )
+        }
+
+        val projects = list(Project::class.java);
+        expect(
+            "There are at least $itemsToCreate total projects (there may be more)",
+            projects.size >= itemsToCreate
+        )
+
+        val canQueryAllProjets = projects.filter {
+            it.name.contains("($isolationKey)")
+        }
+        expect(
+            "All $itemsToCreate of our canQueryAll projects are in the collection",
+            canQueryAllProjets.size == itemsToCreate
+        )
     }
 
-    suspend fun canQueryById() {
+    suspend fun canQueryProjectBySimplePredicate() {
+        // used to isolate entries from this test run.
+        val isolationKey = UUID.randomUUID().toString();
+
+        val itemsToCreate = 5;
+
+        for (i in 1..itemsToCreate) {
+            save(Project.builder()
+                .projectId(UUID.randomUUID().toString())
+                .name("project canQueryProjectBySimplePredicate $i ($isolationKey)")
+                .build()
+            )
+        }
+
+        val projects = list(
+            Project::class.java,
+            Where.matches(
+                Project.NAME.contains("canQueryProjectBySimplePredicate")
+                .and(Project.NAME.contains(isolationKey))
+            )
+        );
+
+        expect(
+            "There are exactly $itemsToCreate matching projects (there may be more)",
+            projects.size == itemsToCreate
+        )
     }
 
-    suspend fun canQueryByPredicate() {
+    suspend fun canDeleteProject() {
+        val project = save(Project.builder()
+            .projectId(UUID.randomUUID().toString())
+            .name("canDeleteProjectByTeamFK project")
+            .build()
+        )
+
+        val deleted = delete(project)
+        expect(
+            "deleted item is for the initial project",
+            deleted.projectId == project.projectId
+        )
+
+        val nothing = get(project);
+        expect(
+            "after deletion, the project can no longer be retrieved",
+            nothing == null
+        )
     }
 
-    suspend fun canUpdate() {
+    suspend fun canQueryProjectByTeamFKPredicate() {
+        // used to isolate entries from this test run.
+        val isolationKey = UUID.randomUUID().toString();
+
+        val team = save(Team.builder()
+            .teamId(UUID.randomUUID().toString())
+            .name("team name canQueryProjectByTeamFKPredicate ($isolationKey)")
+            .build()
+        )
+
+        val itemsToCreate = 5;
+
+        for (i in 1..itemsToCreate) {
+            save(Project.builder()
+                .projectId(UUID.randomUUID().toString())
+                .name("project canQueryProjectBySimplePredicate $i ($isolationKey)")
+                .projectTeamTeamId(team.teamId)
+                .projectTeamName(team.name)
+                .build()
+            )
+        }
+
+        val projects = list(
+            Project::class.java,
+            Where.matches(
+                Project.PROJECT_TEAM_TEAM_ID.eq(team.teamId)
+                    .and(Project.PROJECT_TEAM_NAME.eq(team.name))
+            )
+        );
+
+        expect(
+            "There are exactly $itemsToCreate matching projects (there may be more)",
+            projects.size == itemsToCreate
+        )
     }
 
-    suspend fun canDelete() {
+    suspend fun canUpdateProjectFKFields() {
+        val teamA = save(Team.builder()
+            .teamId(UUID.randomUUID().toString())
+            .name("canUpdateProjectFKFields team A")
+            .build()
+        )
+
+        val teamB = save(Team.builder()
+            .teamId(UUID.randomUUID().toString())
+            .name("canUpdateProjectFKFields team B")
+            .build()
+        )
+
+        val project = save(Project.builder()
+            .projectId(UUID.randomUUID().toString())
+            .name("canUpdateProjectFKFields project")
+            .projectTeamTeamId(teamA.teamId)
+            .projectTeamName(teamA.name)
+            .build()
+        )
+
+        val retrievedProject = get(project)
+        val updatedProject = save(retrievedProject!!.copyOfBuilder()
+            .projectTeamTeamId(teamB.teamId)
+            .projectTeamName(teamB.name)
+            .build()
+        )
+
+        val retrievedUpdatedProject = get(updatedProject)
+        expect(
+            "the project's team ID points to team B",
+            retrievedUpdatedProject?.projectTeamTeamId == teamB.teamId
+        )
+        expect(
+            "the project's team name points to team B",
+            retrievedUpdatedProject?.projectTeamName == teamB.name
+        )
     }
 
-    suspend fun canObserve() {
+    suspend fun canDeleteProjectByTeamFK() {
+        val team = save(Team.builder()
+            .teamId(UUID.randomUUID().toString())
+            .name("canDeleteProjectByTeamFK team")
+            .build()
+        )
+
+        val project = save(Project.builder()
+            .projectId(UUID.randomUUID().toString())
+            .name("canDeleteProjectByTeamFK project")
+            .projectTeamTeamId(team.teamId)
+            .projectTeamName(team.name)
+            .build()
+        )
+
+        delete(
+            project.javaClass,
+            Project.PROJECT_TEAM_TEAM_ID.eq(team.teamId).and(
+                Project.PROJECT_TEAM_NAME.eq(team.name)
+            )
+        );
+
+        val retrieved = list(
+            Project::class.java,
+            Where.matches(Project.PROJECT_TEAM_TEAM_ID.eq(team.teamId).and(
+                Project.PROJECT_TEAM_NAME.eq(team.name)
+            ))
+        )
+        expect(
+            "there should be no team-associated projects left",
+            retrieved.isEmpty()
+        )
+    }
+
+    suspend fun <T>waitForObservedRecord(model: Class<T>, predicate: QueryPredicate):
+            T where T : Model = suspendCoroutine { continuation ->
+
+        var unsubscribe = {
+            Log.e("Tutorial", "subscription NOT canceled")
+        }
+
+        Amplify.DataStore.observe(
+            model,
+            predicate,
+
+            // on start -> Cancelable
+            {
+                unsubscribe = {
+                    it.cancel()
+                    Log.i("Tutorial", "unsubscribed")
+                }
+                Log.i("Tutorial", "subscription established")
+            },
+
+            // on item change
+            {
+                Log.i("Tutorial", "on item change $it")
+                unsubscribe()
+                continuation.resume(it.item())
+            },
+
+            // on failure
+            {
+                Log.e("Tutorial", "on failure", it)
+                unsubscribe()
+                continuation.resumeWithException(it)
+            },
+
+            // on complete
+            { Log.i("Tutorial", "on failure")},
+        )
+    }
+
+    suspend fun canObserveProjectByFK() = coroutineScope {
+        val team = save(Team.builder()
+            .teamId(UUID.randomUUID().toString())
+            .name("canObserveProjectByFK team name")
+            .build()
+        )
+
+        // this isn't quite right either is it ...
+        val updated = async { waitForObservedRecord(
+            Project::class.java,
+            Project.PROJECT_TEAM_TEAM_ID.eq(team.teamId).and(
+                Project.PROJECT_TEAM_NAME.eq(team.name)
+            )
+        )}
+
+        val saved = save(Project.builder()
+            .projectId(UUID.randomUUID().toString())
+            .name("canObserveProjectByFK project")
+            .projectTeamTeamId(team.teamId)
+            .projectTeamName(team.name)
+            .build()
+        )
+
+        expect(
+            "observer message arrives for PK",
+            updated.await() != null
+        )
+        expect(
+            "observed project matches",
+            updated.await().projectId == saved.projectId
+        )
     }
 
     suspend fun canObserveQuery() {
@@ -405,15 +673,28 @@ class MainActivity : AppCompatActivity() {
             Log.i("Tutorial", "at the top of the launch")
             test("can create and retrieve a team with a project", ::canCreateAndRetrieve)
             test("can create a team without a project", ::canCreateTeamWithoutProject)
-            test("can create a project with a team 'directly'", ::canCreateProjectWithTeamDirectly)
-            test("can create a project with a team", ::canCreateProjectWithTeam)
-//            testQueryAll();
-//            testQueryById();
+            test("can create a project with a team 'directly'", ::canCreateProjectWithTeamDirectly, true)
+            test("can create a project with a team", ::canCreateProjectWithTeam, true)
+            test("can query for all created projects", ::canQueryAll)
+            test("can delete a project", ::canDeleteProject)
+
+            // TODO: copy for Team model
+            test("can query for created projects by predicate", ::canQueryProjectBySimplePredicate)
+            test("can query for created projects by FK fields", ::canQueryProjectByTeamFKPredicate)
+            test("can update created project FK fields", ::canUpdateProjectFKFields)
+            test("can delete created project by FK fields", ::canDeleteProjectByTeamFK)
+            test("can observe a project by team FK", ::canObserveProjectByFK)
+
+
 //            testUpdate();
 //            testDelete();
 //            testQueryByPredicate();
 //            testObserve();
 //            testObserveQuery();
+
+            // already covered by `canCreateAndRetrieve`
+            // test("can query by PK" ... )
+
             Log.i("Tutorial", "at the bottom of the launch")
         }
 
