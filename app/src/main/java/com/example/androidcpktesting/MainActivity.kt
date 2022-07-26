@@ -1,33 +1,25 @@
 package com.example.androidcpktesting
 
-import android.app.DownloadManager
-import androidx.appcompat.app.AppCompatActivity
 import android.os.Bundle
 import android.util.Log
+import androidx.appcompat.app.AppCompatActivity
 import com.amplifyframework.AmplifyException
-import com.amplifyframework.core.Action
 import com.amplifyframework.core.Amplify
-import com.amplifyframework.core.async.Cancelable
 import com.amplifyframework.core.model.Model
 import com.amplifyframework.core.model.query.ObserveQueryOptions
 import com.amplifyframework.core.model.query.QueryOptions
-import com.amplifyframework.datastore.AWSDataStorePlugin
 import com.amplifyframework.core.model.query.Where
 import com.amplifyframework.core.model.query.predicate.QueryPredicate
+import com.amplifyframework.datastore.AWSDataStorePlugin
 import com.amplifyframework.datastore.DataStoreConfiguration
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.GlobalScope
+import com.amplifyframework.datastore.generated.model.Project
+import com.amplifyframework.datastore.generated.model.Team
 import kotlinx.coroutines.*
-import kotlin.coroutines.resumeWithException
-import kotlin.coroutines.suspendCoroutine
-
-import com.amplifyframework.datastore.generated.model.*
-import io.reactivex.rxjava3.functions.Cancellable
-import java.lang.ref.Reference
-import java.lang.reflect.TypeVariable
+import java.lang.Exception
 import java.util.*
 import kotlin.coroutines.resume
-import kotlin.reflect.KSuspendFunction0
+import kotlin.coroutines.resumeWithException
+import kotlin.coroutines.suspendCoroutine
 
 class MainActivity : AppCompatActivity() {
 
@@ -41,19 +33,24 @@ class MainActivity : AppCompatActivity() {
      * the logs with a full a trace. These failures are also marked as "KNOWN" errors
      * instead of "FAILED" stories.
      */
-    private suspend fun test(story: String, action: suspend () -> Unit, fastFollow: Boolean = false) {
-//        Log.i("Story", "PENDING : $story")
+    private suspend fun test(
+        story: String,
+        action: suspend () -> Unit,
+        isKnown: Boolean = false
+    ) = coroutineScope {
+        Log.i("Verbose", "PENDING : $story")
         try {
             action()
             Log.i("Story", "MET     : $story")
-        } catch (error: Error) {
-            if (fastFollow) {
+        } catch (error: Exception) {
+            if (isKnown) {
                 Log.e("Story", "KNOWN   : $story")
             } else {
                 Log.e("Story", "FAILED  : $story", error)
             }
         } finally {
             // clear()
+            Log.i("Verbose", "FINALLY : $story")
         }
     }
 
@@ -64,7 +61,7 @@ class MainActivity : AppCompatActivity() {
             }
             else -> {
                 Log.e("Expectation", "FAILED  : ${expectation}")
-                throw Error("Expectation failed: ${expectation}")
+                throw Exception("Expectation failed: ${expectation}")
             }
         }
     }
@@ -122,7 +119,10 @@ class MainActivity : AppCompatActivity() {
                         }
                     }
                 },
-                { Log.e("Tutorial", "get() couldn't get the thing", it)}
+                {
+                    Log.e("Tutorial", "get() couldn't get the thing", it)
+                    continuation.resumeWithException(it)
+                }
             )
         }
     }
@@ -161,7 +161,10 @@ class MainActivity : AppCompatActivity() {
                 model,
                 options ?: Where.matchesAll(),
                 { continuation.resume(it.asSequence().toList()) },
-                { Log.e("Tutorial", "couldn't get the thing 6")}
+                {
+                    Log.e("Tutorial", "couldn't get the thing 6", it)
+                    continuation.resumeWithException(it)
+                }
             )
         }
     }
@@ -171,7 +174,10 @@ class MainActivity : AppCompatActivity() {
             Amplify.DataStore.delete(
                 item,
                 { continuation.resume(it.item()) },
-                { Log.e("Tutorial", "delete() failure", it)}
+                {
+                    Log.e("Tutorial", "delete() failure", it)
+                    continuation.resumeWithException(it)
+                }
             )
         }
     }
@@ -182,7 +188,10 @@ class MainActivity : AppCompatActivity() {
                 model,
                 predicate,
                 { continuation.resume(Unit) },
-                { Log.e("Tutorial", "delete() failure", it)}
+                {
+                    Log.e("Tutorial", "delete() failure", it)
+                    continuation.resumeWithException(it)
+                }
             )
         }
     }
@@ -532,7 +541,7 @@ class MainActivity : AppCompatActivity() {
         );
 
         expect(
-            "There are exactly $itemsToCreate matching projects (there may be more)",
+            "There are exactly $itemsToCreate matching projects",
             projects.size == itemsToCreate
         )
     }
@@ -588,7 +597,7 @@ class MainActivity : AppCompatActivity() {
         );
 
         expect(
-            "There are exactly $itemsToCreate matching projects (there may be more)",
+            "There are exactly $itemsToCreate matching projects",
             projects.size == itemsToCreate
         )
     }
@@ -766,7 +775,7 @@ class MainActivity : AppCompatActivity() {
             .build()
         )
 
-        Log.i("Tutorial", "snapshots ${snapshots.await()}")
+        Log.i("Verbose", "snapshots ${snapshots.await()}")
 
         // this isn't super deterministic, but we have some invariants we can check.
 
@@ -831,7 +840,7 @@ class MainActivity : AppCompatActivity() {
             .build()
         )
 
-        Log.i("Story", "snapshots ${snapshots.await()}")
+        Log.i("Verbose", "snapshots ${snapshots.await()}")
 
         expect(
             "a single snapshot is received",
@@ -858,7 +867,185 @@ class MainActivity : AppCompatActivity() {
         )
     }
 
-    suspend fun canObserveQuery() {
+    suspend fun canQueryTeamBySimplePredicate() = coroutineScope {
+        // used to isolate entries from this test run.
+        val isolationKey = UUID.randomUUID().toString();
+
+        val itemsToCreate = 5;
+
+        for (i in 1..itemsToCreate) {
+            save(Team.builder()
+                .teamId(UUID.randomUUID().toString())
+                .name("team canQueryTeamBySimplePredicate $i ($isolationKey)")
+                .build()
+            )
+        }
+
+        val teams = list(
+            Team::class.java,
+            Where.matches(
+                Team.NAME.contains("canQueryTeamBySimplePredicate")
+                    .and(Team.NAME.contains(isolationKey))
+            )
+        );
+
+        expect(
+            "There are exactly $itemsToCreate matching teams (there may be more)",
+            teams.size == itemsToCreate
+        )
+    }
+
+    suspend fun canQueryTeamByProjectFKPredicate() = coroutineScope {
+        // used to isolate entries from this test run.
+        val isolationKey = UUID.randomUUID().toString();
+
+        val project = save(Project.builder()
+            .projectId(UUID.randomUUID().toString())
+            .name("project name canQueryTeamByProjectFKPredicate ($isolationKey)")
+            .build()
+        )
+
+        val itemsToCreate = 5;
+
+        for (i in 1..itemsToCreate) {
+            save(Team.builder()
+                .teamId(UUID.randomUUID().toString())
+                .name("team canQueryTeamByProjectFKPredicate $i ($isolationKey)")
+                .project(project)
+                .build()
+            )
+        }
+
+        val teams = async (
+            SupervisorJob()) {
+            list(
+                Team::class.java,
+                Where.matches(Team.PROJECT.eq(project))
+            )
+        };
+
+        expect(
+            "There are exactly $itemsToCreate matching projects",
+            teams.await().size == itemsToCreate
+        )
+    }
+
+    suspend fun canUpdateTeamFKFields() = coroutineScope {
+        val projectA = save(Project.builder()
+            .projectId(UUID.randomUUID().toString())
+            .name("canUpdateTeamFKFields project A")
+            .build()
+        )
+
+        val projectB = save(Project.builder()
+            .projectId(UUID.randomUUID().toString())
+            .name("canUpdateTeamFKFields project B")
+            .build()
+        )
+
+        val team = save(Team.builder()
+            .teamId(UUID.randomUUID().toString())
+            .name("canUpdateTeamFKFields team")
+            .project(projectA)
+            .build()
+        )
+
+        val retrievedTeam = get(team)
+        val updatedTeam = save(retrievedTeam!!.copyOfBuilder()
+            .project(projectB)
+            .build()
+        )
+
+        val retrievedUpdatedTeam = get(updatedTeam)
+        expect(
+            "the team's team ID points to project B",
+            retrievedUpdatedTeam?.project?.projectId == projectB.projectId
+        )
+        expect(
+            "the team's team name points to project B",
+            retrievedUpdatedTeam?.project?.name == projectB.name
+        )
+    }
+
+    suspend fun canDeleteTeamByTeamFK() = coroutineScope {
+        val project = save(Project.builder()
+            .projectId(UUID.randomUUID().toString())
+            .name("canDeleteTeamByTeamFK team")
+            .build()
+        )
+
+        val team = save(Team.builder()
+            .teamId(UUID.randomUUID().toString())
+            .name("canDeleteTeamByTeamFK project")
+            .project(project)
+            .build()
+        )
+
+        delete(
+            team.javaClass,
+            Team.PROJECT.eq(project)
+        );
+
+        val singleRetrieved = get(team)
+        expect(
+            "the re-retrieved team should no longer exist",
+            singleRetrieved == null
+        )
+
+        // KNOWN bug on selection ... i think ...
+//        val retrieved = list(
+//            Team::class.java,
+//            Where.matches(Team.PROJECT.eq(project))
+//        )
+//        expect(
+//            "there should be no team-associated projects left",
+//            retrieved.isEmpty()
+//        )
+    }
+
+    suspend fun canObserveTeamCreateByFK() = coroutineScope {
+        val team = save(Team.builder()
+            .teamId(UUID.randomUUID().toString())
+            .name("canObserveProjectCreateByFK team name")
+            .build()
+        )
+
+        // this isn't quite right either is it ...
+        val updated = async { waitForObservedRecord(
+            Project::class.java,
+            Project.PROJECT_TEAM_TEAM_ID.eq(team.teamId).and(
+                Project.PROJECT_TEAM_NAME.eq(team.name)
+            )
+        )}
+
+        val saved = save(Project.builder()
+            .projectId(UUID.randomUUID().toString())
+            .name("canObserveProjectCreateByFK project")
+            .projectTeamTeamId(team.teamId)
+            .projectTeamName(team.name)
+            .build()
+        )
+
+        expect(
+            "observer message arrives for PK",
+            updated.await() != null
+        )
+        expect(
+            "observed project matches",
+            updated.await().projectId == saved.projectId
+        )
+    }
+
+    suspend fun canObserveTeamUpdateByFK() = coroutineScope {
+
+    }
+
+    suspend fun canObserveQueryTeamCreateByFK() = coroutineScope {
+
+    }
+
+    suspend fun canObserveQueryTeamUpdateByFK() = coroutineScope {
+
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -883,7 +1070,8 @@ class MainActivity : AppCompatActivity() {
 
         Log.i("Tutorial", "Before coroutine scope")
 
-        GlobalScope.launch(Dispatchers.Default) {
+        // GlobalScope.launch(Dispatchers.Default) {
+        GlobalScope.async {
             Log.i("Tutorial", "at the top of the launch")
             test("can create and retrieve a team with a project", ::canCreateAndRetrieve)
             test("can create a team without a project", ::canCreateTeamWithoutProject)
@@ -903,10 +1091,10 @@ class MainActivity : AppCompatActivity() {
             test("can observeQuery a project update by team FK", ::canObserveQueryProjectUpdateByFK)
 
             // Team
-//            test("can query for created teams by predicate", ::canQueryTeamBySimplePredicate)
-//            test("can query for created teams by FK fields", ::canQueryTeamByProjectFKPredicate)
-//            test("can update created team FK fields", ::canUpdateTeamFKFields)
-//            test("can delete created team by FK fields", ::canDeleteTeamByTeamFK)
+            test("can query for created teams by predicate", ::canQueryTeamBySimplePredicate)
+            test("can query for created teams by FK fields", ::canQueryTeamByProjectFKPredicate, true)
+            test("can update created team FK fields", ::canUpdateTeamFKFields)
+            test("can delete created team by FK fields", ::canDeleteTeamByTeamFK, true)
 //            test("can observe a team creation by team FK", ::canObserveTeamCreateByFK)
 //            test("can observe a team update by team FK", ::canObserveTeamUpdateByFK)
 //            test("can observeQuery a team create by team FK", ::canObserveQueryTeamCreateByFK)
