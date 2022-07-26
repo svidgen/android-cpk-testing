@@ -9,6 +9,7 @@ import com.amplifyframework.core.Action
 import com.amplifyframework.core.Amplify
 import com.amplifyframework.core.async.Cancelable
 import com.amplifyframework.core.model.Model
+import com.amplifyframework.core.model.query.ObserveQueryOptions
 import com.amplifyframework.core.model.query.QueryOptions
 import com.amplifyframework.datastore.AWSDataStorePlugin
 import com.amplifyframework.core.model.query.Where
@@ -65,6 +66,13 @@ class MainActivity : AppCompatActivity() {
                 Log.e("Expectation", "FAILED  : ${expectation}")
                 throw Error("Expectation failed: ${expectation}")
             }
+        }
+    }
+
+    private fun setTimeout(time: Long, f: () -> Unit) {
+        GlobalScope.launch {
+            delay(time)
+            f()
         }
     }
 
@@ -177,6 +185,92 @@ class MainActivity : AppCompatActivity() {
                 { Log.e("Tutorial", "delete() failure", it)}
             )
         }
+    }
+
+    private suspend fun <T>waitForObservedRecord(model: Class<T>, predicate: QueryPredicate):
+            T where T : Model = suspendCoroutine { continuation ->
+
+        var unsubscribe = {
+            Log.e("Tutorial", "subscription NOT canceled")
+        }
+
+        Amplify.DataStore.observe(
+            model,
+            predicate,
+
+            // on start -> Cancelable
+            {
+                unsubscribe = {
+                    it.cancel()
+                    Log.i("Tutorial", "unsubscribed")
+                }
+                Log.i("Tutorial", "subscription established")
+            },
+
+            // on item change
+            {
+                Log.i("Tutorial", "on item change $it")
+                unsubscribe()
+                continuation.resume(it.item())
+            },
+
+            // on failure
+            {
+                Log.e("Tutorial", "on failure", it)
+                unsubscribe()
+                continuation.resumeWithException(it)
+            },
+
+            // on complete
+            { Log.i("Tutorial", "on failure")},
+        )
+    }
+
+    private suspend fun <T>observeQueryForTime(
+        model: Class<T>,
+        predicate: QueryPredicate,
+        time: Long
+    ): List<List<T>> where T : Model = suspendCoroutine { continuation ->
+        var unsubscribe = {
+            Log.e("Tutorial", "subscription NOT canceled")
+        }
+
+        var snapshots = ArrayList<List<T>>();
+
+        setTimeout(time) {
+            unsubscribe()
+            continuation.resume(snapshots)
+        }
+
+        Amplify.DataStore.observeQuery(
+            model,
+            ObserveQueryOptions().matches(predicate),
+
+            // on start -> Cancelable
+            {
+                unsubscribe = {
+                    it.cancel()
+                    Log.i("Tutorial", "unsubscribed")
+                }
+                Log.i("Tutorial", "subscription established")
+            },
+
+            // on snapshot
+            {
+                Log.i("Tutorial", "on items received $it")
+                snapshots.add(it.items)
+            },
+
+            // on failure
+            {
+                Log.e("Tutorial", "on failure", it)
+                unsubscribe()
+                continuation.resumeWithException(it)
+            },
+
+            // on complete
+            { Log.i("Tutorial", "on failure")},
+        )
     }
 
     private suspend fun clear(): Boolean {
@@ -572,49 +666,10 @@ class MainActivity : AppCompatActivity() {
         )
     }
 
-    suspend fun <T>waitForObservedRecord(model: Class<T>, predicate: QueryPredicate):
-            T where T : Model = suspendCoroutine { continuation ->
-
-        var unsubscribe = {
-            Log.e("Tutorial", "subscription NOT canceled")
-        }
-
-        Amplify.DataStore.observe(
-            model,
-            predicate,
-
-            // on start -> Cancelable
-            {
-                unsubscribe = {
-                    it.cancel()
-                    Log.i("Tutorial", "unsubscribed")
-                }
-                Log.i("Tutorial", "subscription established")
-            },
-
-            // on item change
-            {
-                Log.i("Tutorial", "on item change $it")
-                unsubscribe()
-                continuation.resume(it.item())
-            },
-
-            // on failure
-            {
-                Log.e("Tutorial", "on failure", it)
-                unsubscribe()
-                continuation.resumeWithException(it)
-            },
-
-            // on complete
-            { Log.i("Tutorial", "on failure")},
-        )
-    }
-
-    suspend fun canObserveProjectByFK() = coroutineScope {
+    suspend fun canObserveProjectCreateByFK() = coroutineScope {
         val team = save(Team.builder()
             .teamId(UUID.randomUUID().toString())
-            .name("canObserveProjectByFK team name")
+            .name("canObserveProjectCreateByFK team name")
             .build()
         )
 
@@ -628,7 +683,7 @@ class MainActivity : AppCompatActivity() {
 
         val saved = save(Project.builder()
             .projectId(UUID.randomUUID().toString())
-            .name("canObserveProjectByFK project")
+            .name("canObserveProjectCreateByFK project")
             .projectTeamTeamId(team.teamId)
             .projectTeamName(team.name)
             .build()
@@ -641,6 +696,165 @@ class MainActivity : AppCompatActivity() {
         expect(
             "observed project matches",
             updated.await().projectId == saved.projectId
+        )
+    }
+
+    suspend fun canObserveProjectUpdateByFK() = coroutineScope {
+        val teamA = save(Team.builder()
+            .teamId(UUID.randomUUID().toString())
+            .name("canObserveProjectUpdateByFK team A name")
+            .build()
+        )
+
+        val teamB = save(Team.builder()
+            .teamId(UUID.randomUUID().toString())
+            .name("canObserveProjectUpdateByFK team B name")
+            .build()
+        )
+
+        val saved = save(Project.builder()
+            .projectId(UUID.randomUUID().toString())
+            .name("canObserveProjectUpdateByFK project")
+            .projectTeamTeamId(teamA.teamId)
+            .projectTeamName(teamA.name)
+            .build()
+        )
+
+        val observedUpdate = async { waitForObservedRecord(
+            Project::class.java,
+            Project.PROJECT_TEAM_TEAM_ID.eq(teamB.teamId).and(
+                Project.PROJECT_TEAM_NAME.eq(teamB.name)
+            )
+        )}
+
+        val updated = save(saved.copyOfBuilder()
+            .projectTeamTeamId(teamB.teamId)
+            .projectTeamName(teamB.name)
+            .build()
+        )
+
+        expect(
+            "observer message arrives for PK",
+            observedUpdate.await() != null
+        )
+        expect(
+            "observed project matches",
+            observedUpdate.await().projectId == saved.projectId
+        )
+    }
+
+    suspend fun canObserveQueryProjectCreateByFK() = coroutineScope {
+        val team = save(Team.builder()
+            .teamId(UUID.randomUUID().toString())
+            .name("canObserveQueryProjectCreateByFK team")
+            .build()
+        )
+
+        val snapshots = async { observeQueryForTime(
+            Project::class.java,
+            Project.PROJECT_TEAM_TEAM_ID.eq(team.teamId).and(
+                Project.PROJECT_TEAM_NAME.eq(team.name)
+            ),
+            3000
+        )}
+
+        val saved = save(Project.builder()
+            .projectId(UUID.randomUUID().toString())
+            .name("canObserveQueryProjectCreateByFK")
+            .projectTeamTeamId(team.teamId)
+            .projectTeamName(team.name)
+            .build()
+        )
+
+        Log.i("Tutorial", "snapshots ${snapshots.await()}")
+
+        // this isn't super deterministic, but we have some invariants we can check.
+
+        expect(
+            "a single snapshot is received",
+            snapshots.await().size >= 1
+        )
+
+        var haveSeenPopulatedSnapshot = false
+
+        for (snapshot in snapshots.await()) {
+            if (snapshot.size > 0) {
+                haveSeenPopulatedSnapshot = true
+                for (item in snapshot) {
+                    expect(
+                        "the snapshot's item matches our saved project",
+                        item.projectId == saved.projectId
+                    )
+                }
+            }
+        }
+
+        expect(
+            "at least one snapshot was populated",
+            haveSeenPopulatedSnapshot
+        )
+
+    }
+
+    suspend fun canObserveQueryProjectUpdateByFK() = coroutineScope {
+        val teamA = save(Team.builder()
+            .teamId(UUID.randomUUID().toString())
+            .name("canObserveQueryProjectCreateByFK team A")
+            .build()
+        )
+
+        val teamB = save(Team.builder()
+            .teamId(UUID.randomUUID().toString())
+            .name("canObserveQueryProjectCreateByFK team B")
+            .build()
+        )
+
+        val saved = save(Project.builder()
+            .projectId(UUID.randomUUID().toString())
+            .name("canObserveQueryProjectCreateByFK")
+            .projectTeamTeamId(teamA.teamId)
+            .projectTeamName(teamA.name)
+            .build()
+        )
+
+        val snapshots = async { observeQueryForTime(
+            Project::class.java,
+            Project.PROJECT_TEAM_TEAM_ID.eq(teamB.teamId).and(
+                Project.PROJECT_TEAM_NAME.eq(teamB.name)
+            ),
+            3000
+        )}
+
+        var updated = save(saved.copyOfBuilder()
+            .projectTeamTeamId(teamB.teamId)
+            .projectTeamName(teamB.name)
+            .build()
+        )
+
+        Log.i("Story", "snapshots ${snapshots.await()}")
+
+        expect(
+            "a single snapshot is received",
+            snapshots.await().size >= 1
+        )
+
+        var haveSeenPopulatedSnapshot = false
+
+        for (snapshot in snapshots.await()) {
+            if (snapshot.size > 0) {
+                haveSeenPopulatedSnapshot = true
+                for (item in snapshot) {
+                    expect(
+                        "the snapshot's item matches our saved project",
+                        item.projectId == updated.projectId
+                    )
+                }
+            }
+        }
+
+        expect(
+            "at least one snapshot was populated",
+            haveSeenPopulatedSnapshot
         )
     }
 
@@ -678,12 +892,25 @@ class MainActivity : AppCompatActivity() {
             test("can query for all created projects", ::canQueryAll)
             test("can delete a project", ::canDeleteProject)
 
-            // TODO: copy for Team model
+            // Project
             test("can query for created projects by predicate", ::canQueryProjectBySimplePredicate)
             test("can query for created projects by FK fields", ::canQueryProjectByTeamFKPredicate)
             test("can update created project FK fields", ::canUpdateProjectFKFields)
             test("can delete created project by FK fields", ::canDeleteProjectByTeamFK)
-            test("can observe a project by team FK", ::canObserveProjectByFK)
+            test("can observe a project creation by team FK", ::canObserveProjectCreateByFK)
+            test("can observe a project update by team FK", ::canObserveProjectUpdateByFK)
+            test("can observeQuery a project create by team FK", ::canObserveQueryProjectCreateByFK)
+            test("can observeQuery a project update by team FK", ::canObserveQueryProjectUpdateByFK)
+
+            // Team
+//            test("can query for created teams by predicate", ::canQueryTeamBySimplePredicate)
+//            test("can query for created teams by FK fields", ::canQueryTeamByProjectFKPredicate)
+//            test("can update created team FK fields", ::canUpdateTeamFKFields)
+//            test("can delete created team by FK fields", ::canDeleteTeamByTeamFK)
+//            test("can observe a team creation by team FK", ::canObserveTeamCreateByFK)
+//            test("can observe a team update by team FK", ::canObserveTeamUpdateByFK)
+//            test("can observeQuery a team create by team FK", ::canObserveQueryTeamCreateByFK)
+//            test("can observeQuery a team update by team FK", ::canObserveQueryTeamUpdateByFK)
 
 
 //            testUpdate();
