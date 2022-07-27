@@ -558,6 +558,33 @@ class MainActivity : AppCompatActivity() {
         )
     }
 
+    suspend fun canQueryProjectBySortKeyAlone() {
+        // used to isolate entries from this test run.
+        val isolationKey = UUID.randomUUID().toString();
+
+        val saved = save(Project.builder()
+            .projectId(UUID.randomUUID().toString())
+            .name("project canQueryProjectBySortKeyAlone ($isolationKey)")
+            .build()
+        )
+
+        val projects = list(
+            Project::class.java,
+            Where.matches(
+                Project.NAME.eq(saved.name)
+            )
+        );
+
+        expect(
+            "There are exactly ONE matching projects",
+            projects.size == 1
+        )
+        expect(
+            "the returned item is the saved item",
+            projects.first().projectId == saved.projectId
+        )
+    }
+
     suspend fun canQueryProjectBySimplePredicate() {
         // used to isolate entries from this test run.
         val isolationKey = UUID.randomUUID().toString();
@@ -698,6 +725,65 @@ class MainActivity : AppCompatActivity() {
         expect(
             "the project's team name points to team B",
             retrievedUpdatedProject?.projectTeamName == teamB.name
+        )
+    }
+
+    suspend fun canDeleteProjectByPK() {
+        val project = save(Project.builder()
+            .projectId(UUID.randomUUID().toString())
+            .name("canDeleteProjectByPK project")
+            .build()
+        )
+
+        delete(
+            Project::class.java,
+            Project.PROJECT_ID.eq(project.projectId).and(
+                Project.NAME.eq(project.name)
+            )
+        )
+
+        val nothing = get(project);
+        expect(
+            "after deletion, the project can no longer be retrieved",
+            nothing == null
+        )
+    }
+
+    suspend fun canDeleteProjectByClusterKeyAlone() {
+        val project = save(Project.builder()
+            .projectId(UUID.randomUUID().toString())
+            .name("canDeleteProjectByClusterKeyAlone project")
+            .build()
+        )
+
+        delete(
+            Project::class.java,
+            Project.PROJECT_ID.eq(project.projectId)
+        )
+
+        val nothing = get(project);
+        expect(
+            "after deletion, the project can no longer be retrieved",
+            nothing == null
+        )
+    }
+
+    suspend fun canDeleteProjectBySortKeyAlone() {
+        val project = save(Project.builder()
+            .projectId(UUID.randomUUID().toString())
+            .name("canDeleteProjectBySortKeyAlone project")
+            .build()
+        )
+
+        delete(
+            Project::class.java,
+            Project.NAME.eq(project.name)
+        )
+
+        val nothing = get(project);
+        expect(
+            "after deletion, the project can no longer be retrieved",
+            nothing == null
         )
     }
 
@@ -982,6 +1068,33 @@ class MainActivity : AppCompatActivity() {
         )
     }
 
+    suspend fun canQueryTeamBySortKeyAlone() {
+        // used to isolate entries from this test run.
+        val isolationKey = UUID.randomUUID().toString();
+
+        val saved = save(Team.builder()
+            .teamId(UUID.randomUUID().toString())
+            .name("project canQueryTeamBySortKeyAlone ($isolationKey)")
+            .build()
+        )
+
+        val teams = list(
+            Team::class.java,
+            Where.matches(
+                Team.NAME.eq(saved.name)
+            )
+        );
+
+        expect(
+            "There are exactly ONE matching projects",
+            teams.size == 1
+        )
+        expect(
+            "the returned item is the saved item",
+            teams.first().teamId == saved.teamId
+        )
+    }
+
     suspend fun canQueryTeamByProjectFKPredicate() = coroutineScope {
         // used to isolate entries from this test run.
         val isolationKey = UUID.randomUUID().toString();
@@ -1085,6 +1198,65 @@ class MainActivity : AppCompatActivity() {
         expect(
             "the team's team name points to project B",
             retrievedUpdatedTeam?.project?.name == projectB.name
+        )
+    }
+
+    suspend fun canDeleteTeamByPK() {
+        val team = save(Team.builder()
+            .teamId(UUID.randomUUID().toString())
+            .name("canDeleteTeamByPK team")
+            .build()
+        )
+
+        delete(
+            Team::class.java,
+            Team.TEAM_ID.eq(team.teamId).and(
+                Team.NAME.eq(team.name)
+            )
+        )
+
+        val nothing = get(team);
+        expect(
+            "after deletion, the team can no longer be retrieved",
+            nothing == null
+        )
+    }
+
+    suspend fun canDeleteTeamByClusterKeyAlone() {
+        val team = save(Team.builder()
+            .teamId(UUID.randomUUID().toString())
+            .name("canDeleteTeamByClusterKeyAlone project")
+            .build()
+        )
+
+        delete(
+            Team::class.java,
+            Team.TEAM_ID.eq(team.teamId)
+        )
+
+        val nothing = get(team);
+        expect(
+            "after deletion, the team can no longer be retrieved",
+            nothing == null
+        )
+    }
+
+    suspend fun canDeleteTeamBySortKeyAlone() {
+        val team = save(Team.builder()
+            .teamId(UUID.randomUUID().toString())
+            .name("canDeleteTeamBySortKeyAlone project")
+            .build()
+        )
+
+        delete(
+            Team::class.java,
+            Team.NAME.eq(team.name)
+        )
+
+        val nothing = get(team);
+        expect(
+            "after deletion, the team can no longer be retrieved",
+            nothing == null
         )
     }
 
@@ -1562,8 +1734,8 @@ class MainActivity : AppCompatActivity() {
         GlobalScope.async {
             Log.i("Tutorial", "at the top of the launch")
 
-            clear()
-            delay(5000)
+//            clear()
+//            delay(5000)
 
             Log.i("Verbose", "Data cleared")
 
@@ -1580,7 +1752,11 @@ class MainActivity : AppCompatActivity() {
             test("can query for created projects by predicate", ::canQueryProjectBySimplePredicate)
             test("can query for created projects by FK fields", ::canQueryProjectByTeamFKPredicate)
             test("can query for created projects by cluster key alone", ::canQueryProjectByClusterKeyAlone)
+            test("can query for created projects by sort key alone", ::canQueryProjectBySortKeyAlone)
             test("can update created project FK fields", ::canUpdateProjectFKFields)
+            test("can delete created project by PK", ::canDeleteProjectByPK)
+            test("can delete created project by cluster key", ::canDeleteProjectByClusterKeyAlone)
+            test("can delete created project by sort key", ::canDeleteProjectBySortKeyAlone)
             test("can delete created project by FK fields", ::canDeleteProjectByTeamFK)
 
             // Project (hasOne) predicate doesn't provide a `.TEAM` matcher, so we only have one
@@ -1595,7 +1771,11 @@ class MainActivity : AppCompatActivity() {
             test("can query for created teams by FK fields", ::canQueryTeamByProjectFKPredicate, true)
             test("can query for created teams by project predicate with PK matcher", ::canQueryTeamByProjectPKPredicate)
             test("can query for created teams by cluster key alone", ::canQueryTeamByClusterKeyAlone)
+            test("can query for created teams by sort key alone", ::canQueryTeamBySortKeyAlone)
             test("can update created team FK fields", ::canUpdateTeamFKFields)
+            test("can delete created team by PK", ::canDeleteTeamByPK)
+            test("can delete created team by cluster key", ::canDeleteTeamByClusterKeyAlone)
+            test("can delete created team by sort key", ::canDeleteTeamBySortKeyAlone)
             test("can delete created team by FK fields", ::canDeleteTeamByTeamFK, true)
             test("can delete created team by project predicate with PK matcher", ::canDeleteTeamByProjectPKPredicate, true)
             test("observed team's project is attached", ::observedTeamHasProjectAttached)
