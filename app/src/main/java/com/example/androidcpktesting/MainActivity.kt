@@ -1289,8 +1289,170 @@ class MainActivity : AppCompatActivity() {
 
     }
 
-    suspend fun canObserveQueryTeamUpdateByFK() = coroutineScope {
+    suspend fun canObserveQueryTeamCreateByProjectPKPredicate() = coroutineScope {
+        val project = save(Project.builder()
+            .projectId(UUID.randomUUID().toString())
+            .name("canObserveQueryTeamCreateByFK project")
+            .build()
+        )
 
+        val snapshots = async { observeQueryForTime(
+            Team::class.java,
+            Project.PROJECT_ID.eq(project.projectId),
+            3000
+        )}
+
+        val saved = save(Team.builder()
+            .teamId(UUID.randomUUID().toString())
+            .name("canObserveQueryProjectCreateByFK team")
+            .project(project)
+            .build()
+        )
+
+        Log.i("Verbose", "snapshots ${snapshots.await()}")
+
+        // this isn't super deterministic, but we have some invariants we can check.
+
+        expect(
+            "a single snapshot is received",
+            snapshots.await().size >= 1
+        )
+
+        var haveSeenPopulatedSnapshot = false
+
+        for (snapshot in snapshots.await()) {
+            if (snapshot.size > 0) {
+                haveSeenPopulatedSnapshot = true
+                for (item in snapshot) {
+                    expect(
+                        "the snapshot's item matches our saved team",
+                        item.teamId == saved.teamId
+                    )
+                }
+            }
+        }
+
+        expect(
+            "at least one snapshot was populated",
+            haveSeenPopulatedSnapshot
+        )
+
+    }
+
+    suspend fun canObserveQueryTeamUpdateByFK() = coroutineScope {
+        val projectA = save(Project.builder()
+            .projectId(UUID.randomUUID().toString())
+            .name("canObserveQueryTeamUpdateByFK project A")
+            .build()
+        )
+
+        val projectB = save(Project.builder()
+            .projectId(UUID.randomUUID().toString())
+            .name("canObserveQueryTeamUpdateByFK project B")
+            .build()
+        )
+
+        val saved = save(Team.builder()
+            .teamId(UUID.randomUUID().toString())
+            .name("canObserveQueryTeamUpdateByFK team")
+            .project(projectA)
+            .build()
+        )
+
+        val snapshots = async { observeQueryForTime(
+            Team::class.java,
+            Team.PROJECT.eq(projectB),
+            3000
+        )}
+
+        var updated = save(saved.copyOfBuilder()
+            .project(projectB)
+            .build()
+        )
+
+        Log.i("Verbose", "snapshots ${snapshots.await()}")
+
+        expect(
+            "a single snapshot is received",
+            snapshots.await().size >= 1
+        )
+
+        var haveSeenPopulatedSnapshot = false
+
+        for (snapshot in snapshots.await()) {
+            if (snapshot.size > 0) {
+                haveSeenPopulatedSnapshot = true
+                for (item in snapshot) {
+                    expect(
+                        "the snapshot's item matches our saved team",
+                        item.teamId == updated.teamId
+                    )
+                }
+            }
+        }
+
+        expect(
+            "at least one snapshot was populated",
+            haveSeenPopulatedSnapshot
+        )
+    }
+
+    suspend fun canObserveQueryTeamUpdateByProjectPKPredicate() = coroutineScope {
+        val projectA = save(Project.builder()
+            .projectId(UUID.randomUUID().toString())
+            .name("canObserveQueryTeamUpdateByFK project A")
+            .build()
+        )
+
+        val projectB = save(Project.builder()
+            .projectId(UUID.randomUUID().toString())
+            .name("canObserveQueryTeamUpdateByFK project B")
+            .build()
+        )
+
+        val saved = save(Team.builder()
+            .teamId(UUID.randomUUID().toString())
+            .name("canObserveQueryTeamUpdateByFK team")
+            .project(projectA)
+            .build()
+        )
+
+        val snapshots = async { observeQueryForTime(
+            Team::class.java,
+            Project.PROJECT_ID.eq(projectB.projectId),
+            3000
+        )}
+
+        var updated = save(saved.copyOfBuilder()
+            .project(projectB)
+            .build()
+        )
+
+        Log.i("Verbose", "snapshots ${snapshots.await()}")
+
+        expect(
+            "a single snapshot is received",
+            snapshots.await().size >= 1
+        )
+
+        var haveSeenPopulatedSnapshot = false
+
+        for (snapshot in snapshots.await()) {
+            if (snapshot.size > 0) {
+                haveSeenPopulatedSnapshot = true
+                for (item in snapshot) {
+                    expect(
+                        "the snapshot's item matches our saved team",
+                        item.teamId == updated.teamId
+                    )
+                }
+            }
+        }
+
+        expect(
+            "at least one snapshot was populated",
+            haveSeenPopulatedSnapshot
+        )
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -1318,6 +1480,8 @@ class MainActivity : AppCompatActivity() {
         // GlobalScope.launch(Dispatchers.Default) {
         GlobalScope.async {
             Log.i("Tutorial", "at the top of the launch")
+
+            // Basics
             test("can create and retrieve a team with a project", ::canCreateAndRetrieve)
             test("can create a team without a project", ::canCreateTeamWithoutProject)
             test("can create a project with a team 'directly'", ::canCreateProjectWithTeamDirectly, true)
@@ -1330,6 +1494,9 @@ class MainActivity : AppCompatActivity() {
             test("can query for created projects by FK fields", ::canQueryProjectByTeamFKPredicate)
             test("can update created project FK fields", ::canUpdateProjectFKFields)
             test("can delete created project by FK fields", ::canDeleteProjectByTeamFK)
+
+            // Project (hasOne) predicate doesn't provide a `.TEAM` matcher, so we only have one
+            // test case for each of create,update + observe,observeQuery
             test("can observe a project creation by team FK", ::canObserveProjectCreateByFK)
             test("can observe a project update by team FK", ::canObserveProjectUpdateByFK)
             test("can observeQuery a project create by team FK", ::canObserveQueryProjectCreateByFK)
@@ -1343,23 +1510,18 @@ class MainActivity : AppCompatActivity() {
             test("can delete created team by FK fields", ::canDeleteTeamByTeamFK, true)
             test("can delete created team by project predicate with PK matcher", ::canDeleteTeamByProjectPKPredicate, true)
             test("observed team's project is attached", ::observedTeamHasProjectAttached)
+
+            // Team (belongsTo) predicate provides a `.PROJECT` matcher, so we only have two
+            // test case for each of create,update + observe,observeQuery.
             test("can observe a team creation by team FK", ::canObserveTeamCreateByFK, true)
             test("can observe a team creation by project predicate PK matcher", ::canObserveTeamCreateProjectPKPredicate)
             test("can observe a team update by team FK", ::canObserveTeamUpdateByFK, true)
             test("can observe a team update project predicate PK matcher", ::canObserveTeamUpdateByProjectPKPredicate)
-            test("can observeQuery a team create by team FK", ::canObserveQueryTeamCreateByFK)
 
-//            test("can observeQuery a team update by team FK", ::canObserveQueryTeamUpdateByFK)
-
-
-//            testUpdate();
-//            testDelete();
-//            testQueryByPredicate();
-//            testObserve();
-//            testObserveQuery();
-
-            // already covered by `canCreateAndRetrieve`
-            // test("can query by PK" ... )
+            test("can observeQuery a team create by team FK", ::canObserveQueryTeamCreateByFK, true)
+            test("can observeQuery a team create by project PK predicate", ::canObserveQueryTeamCreateByProjectPKPredicate)
+            test("can observeQuery a team update by team FK", ::canObserveQueryTeamUpdateByFK, true)
+            test("can observeQuery a team update by project PK predicate", ::canObserveQueryTeamUpdateByProjectPKPredicate)
 
             Log.i("Tutorial", "at the bottom of the launch")
         }
