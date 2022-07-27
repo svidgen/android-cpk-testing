@@ -1,0 +1,231 @@
+# this is an auto generated file. This will be overwritten
+query GetProject($projectId: ID!, $name: String!) {
+  getProject(projectId: $projectId, name: $name) {
+    projectId
+    name
+    team {
+      teamId
+      name
+      project {
+        projectId
+        name
+        createdAt
+        updatedAt
+        _version
+        _deleted
+        _lastChangedAt
+        projectTeamTeamId
+        projectTeamName
+      }
+      createdAt
+      updatedAt
+      _version
+      _deleted
+      _lastChangedAt
+      teamProjectProjectId
+      teamProjectName
+    }
+    createdAt
+    updatedAt
+    _version
+    _deleted
+    _lastChangedAt
+    projectTeamTeamId
+    projectTeamName
+  }
+}
+query ListProjects(
+  $projectId: ID
+  $name: ModelStringKeyConditionInput
+  $filter: ModelProjectFilterInput
+  $limit: Int
+  $nextToken: String
+  $sortDirection: ModelSortDirection
+) {
+  listProjects(
+    projectId: $projectId
+    name: $name
+    filter: $filter
+    limit: $limit
+    nextToken: $nextToken
+    sortDirection: $sortDirection
+  ) {
+    items {
+      projectId
+      name
+      team {
+        teamId
+        name
+        createdAt
+        updatedAt
+        _version
+        _deleted
+        _lastChangedAt
+        teamProjectProjectId
+        teamProjectName
+      }
+      createdAt
+      updatedAt
+      _version
+      _deleted
+      _lastChangedAt
+      projectTeamTeamId
+      projectTeamName
+    }
+    nextToken
+    startedAt
+  }
+}
+query SyncProjects(
+  $filter: ModelProjectFilterInput
+  $limit: Int
+  $nextToken: String
+  $lastSync: AWSTimestamp
+) {
+  syncProjects(
+    filter: $filter
+    limit: $limit
+    nextToken: $nextToken
+    lastSync: $lastSync
+  ) {
+    items {
+      projectId
+      name
+      team {
+        teamId
+        name
+        createdAt
+        updatedAt
+        _version
+        _deleted
+        _lastChangedAt
+        teamProjectProjectId
+        teamProjectName
+      }
+      createdAt
+      updatedAt
+      _version
+      _deleted
+      _lastChangedAt
+      projectTeamTeamId
+      projectTeamName
+    }
+    nextToken
+    startedAt
+  }
+}
+query GetTeam($teamId: ID!, $name: String!) {
+  getTeam(teamId: $teamId, name: $name) {
+    teamId
+    name
+    project {
+      projectId
+      name
+      team {
+        teamId
+        name
+        createdAt
+        updatedAt
+        _version
+        _deleted
+        _lastChangedAt
+        teamProjectProjectId
+        teamProjectName
+      }
+      createdAt
+      updatedAt
+      _version
+      _deleted
+      _lastChangedAt
+      projectTeamTeamId
+      projectTeamName
+    }
+    createdAt
+    updatedAt
+    _version
+    _deleted
+    _lastChangedAt
+    teamProjectProjectId
+    teamProjectName
+  }
+}
+query ListTeams(
+  $teamId: ID
+  $name: ModelStringKeyConditionInput
+  $filter: ModelTeamFilterInput
+  $limit: Int
+  $nextToken: String
+  $sortDirection: ModelSortDirection
+) {
+  listTeams(
+    teamId: $teamId
+    name: $name
+    filter: $filter
+    limit: $limit
+    nextToken: $nextToken
+    sortDirection: $sortDirection
+  ) {
+    items {
+      teamId
+      name
+      project {
+        projectId
+        name
+        createdAt
+        updatedAt
+        _version
+        _deleted
+        _lastChangedAt
+        projectTeamTeamId
+        projectTeamName
+      }
+      createdAt
+      updatedAt
+      _version
+      _deleted
+      _lastChangedAt
+      teamProjectProjectId
+      teamProjectName
+    }
+    nextToken
+    startedAt
+  }
+}
+query SyncTeams(
+  $filter: ModelTeamFilterInput
+  $limit: Int
+  $nextToken: String
+  $lastSync: AWSTimestamp
+) {
+  syncTeams(
+    filter: $filter
+    limit: $limit
+    nextToken: $nextToken
+    lastSync: $lastSync
+  ) {
+    items {
+      teamId
+      name
+      project {
+        projectId
+        name
+        createdAt
+        updatedAt
+        _version
+        _deleted
+        _lastChangedAt
+        projectTeamTeamId
+        projectTeamName
+      }
+      createdAt
+      updatedAt
+      _version
+      _deleted
+      _lastChangedAt
+      teamProjectProjectId
+      teamProjectName
+    }
+    nextToken
+    startedAt
+  }
+}

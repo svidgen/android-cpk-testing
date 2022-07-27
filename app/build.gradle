@@ -49,6 +49,7 @@ dependencies {
     // Amplify core dependency
     implementation 'com.amplifyframework:core:v1.37.0-cpkey-preview.2'
     implementation 'com.amplifyframework:aws-datastore:v1.37.0-cpkey-preview.2'
+    implementation 'com.amplifyframework:aws-api:v1.37.0-cpkey-preview.2'
 
     // Support for Java 8 features
     coreLibraryDesugaring 'com.android.tools:desugar_jdk_libs:1.1.5'

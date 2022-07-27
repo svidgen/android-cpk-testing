@@ -1,0 +1,211 @@
+# this is an auto generated file. This will be overwritten
+subscription OnCreateProject($filter: ModelSubscriptionProjectFilterInput) {
+  onCreateProject(filter: $filter) {
+    projectId
+    name
+    team {
+      teamId
+      name
+      project {
+        projectId
+        name
+        createdAt
+        updatedAt
+        _version
+        _deleted
+        _lastChangedAt
+        projectTeamTeamId
+        projectTeamName
+      }
+      createdAt
+      updatedAt
+      _version
+      _deleted
+      _lastChangedAt
+      teamProjectProjectId
+      teamProjectName
+    }
+    createdAt
+    updatedAt
+    _version
+    _deleted
+    _lastChangedAt
+    projectTeamTeamId
+    projectTeamName
+  }
+}
+subscription OnUpdateProject($filter: ModelSubscriptionProjectFilterInput) {
+  onUpdateProject(filter: $filter) {
+    projectId
+    name
+    team {
+      teamId
+      name
+      project {
+        projectId
+        name
+        createdAt
+        updatedAt
+        _version
+        _deleted
+        _lastChangedAt
+        projectTeamTeamId
+        projectTeamName
+      }
+      createdAt
+      updatedAt
+      _version
+      _deleted
+      _lastChangedAt
+      teamProjectProjectId
+      teamProjectName
+    }
+    createdAt
+    updatedAt
+    _version
+    _deleted
+    _lastChangedAt
+    projectTeamTeamId
+    projectTeamName
+  }
+}
+subscription OnDeleteProject($filter: ModelSubscriptionProjectFilterInput) {
+  onDeleteProject(filter: $filter) {
+    projectId
+    name
+    team {
+      teamId
+      name
+      project {
+        projectId
+        name
+        createdAt
+        updatedAt
+        _version
+        _deleted
+        _lastChangedAt
+        projectTeamTeamId
+        projectTeamName
+      }
+      createdAt
+      updatedAt
+      _version
+      _deleted
+      _lastChangedAt
+      teamProjectProjectId
+      teamProjectName
+    }
+    createdAt
+    updatedAt
+    _version
+    _deleted
+    _lastChangedAt
+    projectTeamTeamId
+    projectTeamName
+  }
+}
+subscription OnCreateTeam($filter: ModelSubscriptionTeamFilterInput) {
+  onCreateTeam(filter: $filter) {
+    teamId
+    name
+    project {
+      projectId
+      name
+      team {
+        teamId
+        name
+        createdAt
+        updatedAt
+        _version
+        _deleted
+        _lastChangedAt
+        teamProjectProjectId
+        teamProjectName
+      }
+      createdAt
+      updatedAt
+      _version
+      _deleted
+      _lastChangedAt
+      projectTeamTeamId
+      projectTeamName
+    }
+    createdAt
+    updatedAt
+    _version
+    _deleted
+    _lastChangedAt
+    teamProjectProjectId
+    teamProjectName
+  }
+}
+subscription OnUpdateTeam($filter: ModelSubscriptionTeamFilterInput) {
+  onUpdateTeam(filter: $filter) {
+    teamId
+    name
+    project {
+      projectId
+      name
+      team {
+        teamId
+        name
+        createdAt
+        updatedAt
+        _version
+        _deleted
+        _lastChangedAt
+        teamProjectProjectId
+        teamProjectName
+      }
+      createdAt
+      updatedAt
+      _version
+      _deleted
+      _lastChangedAt
+      projectTeamTeamId
+      projectTeamName
+    }
+    createdAt
+    updatedAt
+    _version
+    _deleted
+    _lastChangedAt
+    teamProjectProjectId
+    teamProjectName
+  }
+}
+subscription OnDeleteTeam($filter: ModelSubscriptionTeamFilterInput) {
+  onDeleteTeam(filter: $filter) {
+    teamId
+    name
+    project {
+      projectId
+      name
+      team {
+        teamId
+        name
+        createdAt
+        updatedAt
+        _version
+        _deleted
+        _lastChangedAt
+        teamProjectProjectId
+        teamProjectName
+      }
+      createdAt
+      updatedAt
+      _version
+      _deleted
+      _lastChangedAt
+      projectTeamTeamId
+      projectTeamName
+    }
+    createdAt
+    updatedAt
+    _version
+    _deleted
+    _lastChangedAt
+    teamProjectProjectId
+    teamProjectName
+  }
+}

@@ -4,16 +4,19 @@ import android.os.Bundle
 import android.util.Log
 import androidx.appcompat.app.AppCompatActivity
 import com.amplifyframework.AmplifyException
+import com.amplifyframework.api.ApiPlugin
 import com.amplifyframework.core.Amplify
 import com.amplifyframework.core.model.Model
 import com.amplifyframework.core.model.query.ObserveQueryOptions
 import com.amplifyframework.core.model.query.QueryOptions
 import com.amplifyframework.core.model.query.Where
 import com.amplifyframework.core.model.query.predicate.QueryPredicate
+import com.amplifyframework.api.aws.AWSApiPlugin
 import com.amplifyframework.datastore.AWSDataStorePlugin
 import com.amplifyframework.datastore.DataStoreConfiguration
 import com.amplifyframework.datastore.generated.model.Project
 import com.amplifyframework.datastore.generated.model.Team
+import com.amplifyframework.hub.AWSHubPlugin
 import kotlinx.coroutines.*
 import java.lang.Exception
 import java.util.*
@@ -1460,14 +1463,18 @@ class MainActivity : AppCompatActivity() {
         setContentView(R.layout.activity_main)
 
         try {
-            val config = DataStoreConfiguration.builder()
-                .errorHandler {
-                    Log.e("Tutorial", "errorHandler caught", it)
-                }
-                .build()
+//            val config = DataStoreConfiguration.builder()
+//                .errorHandler {
+//                    Log.e("Tutorial", "errorHandler caught", it)
+//                }
+//                .build()
+//
+//            val dataStorePlugin = AWSDataStorePlugin.builder().dataStoreConfiguration(config).build()
+//            Amplify.addPlugin(dataStorePlugin)
 
-            val dataStorePlugin = AWSDataStorePlugin.builder().dataStoreConfiguration(config).build()
-            Amplify.addPlugin(dataStorePlugin)
+            Amplify.addPlugin(AWSHubPlugin())
+            Amplify.addPlugin(AWSApiPlugin())
+            Amplify.addPlugin(AWSDataStorePlugin())
 
             Amplify.configure(applicationContext)
             Log.i("Tutorial", "Initialized amplify app")
@@ -1480,6 +1487,11 @@ class MainActivity : AppCompatActivity() {
         // GlobalScope.launch(Dispatchers.Default) {
         GlobalScope.async {
             Log.i("Tutorial", "at the top of the launch")
+
+            clear()
+            delay(5000)
+
+            Log.i("Verbose", "Data cleared")
 
             // Basics
             test("can create and retrieve a team with a project", ::canCreateAndRetrieve)
