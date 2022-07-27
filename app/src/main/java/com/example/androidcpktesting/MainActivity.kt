@@ -12,6 +12,9 @@ import com.amplifyframework.core.model.query.QueryOptions
 import com.amplifyframework.core.model.query.Where
 import com.amplifyframework.core.model.query.predicate.QueryPredicate
 import com.amplifyframework.api.aws.AWSApiPlugin
+import com.amplifyframework.api.aws.GsonVariablesSerializer
+import com.amplifyframework.api.graphql.SimpleGraphQLRequest
+import com.amplifyframework.api.graphql.model.ModelMutation
 import com.amplifyframework.datastore.AWSDataStorePlugin
 import com.amplifyframework.datastore.DataStoreConfiguration
 import com.amplifyframework.datastore.generated.model.Project
@@ -73,6 +76,47 @@ class MainActivity : AppCompatActivity() {
         return GlobalScope.launch {
             delay(time)
             f()
+        }
+    }
+
+    private suspend fun <T>createWithAPI(item: T): T where T : Model {
+        return suspendCoroutine { continuation ->
+            try {
+                Log.i("Verbose", "starting to create mutation")
+
+                val baseMutation = ModelMutation.create(item)
+                Log.i("Verbose", "mutation created: ${baseMutation}")
+
+                val newValues = baseMutation.variables.toMutableMap()
+                newValues.set("_version", "1")
+
+                val customMutation = SimpleGraphQLRequest<T>(
+                    baseMutation.query,
+                    newValues,
+                    item::class.java,
+                    GsonVariablesSerializer()
+                )
+
+                Log.i(
+                    "Verbose",
+                    "new mutation: ${customMutation.query} -> ${customMutation.variables}"
+                )
+
+                Amplify.API.mutate(
+                    customMutation,
+                    {
+                        Log.i("Verbose", "created ${item}")
+                        continuation.resume(it.data)
+                    },
+                    {
+                        Log.e("Verbose", "failed to create ${item}", it)
+                        continuation.resumeWithException(it)
+                    }
+                )
+            } catch (error: Exception) {
+                Log.e("Verbose", "could not create mutation for ${item}", error)
+                continuation.resumeWithException(error)
+            }
         }
     }
 
@@ -1810,6 +1854,56 @@ class MainActivity : AppCompatActivity() {
         )
     }
 
+    // other clients
+
+    suspend fun canObserveProjectCreateFromAnotherClient() = coroutineScope {
+        val project = Project.builder()
+            .projectId(UUID.randomUUID().toString())
+            .name("canObserveProjectCreateFromAnotherClient project")
+            .build()
+
+        val observation = async { waitForObservedRecord(
+            Project::class.java,
+            Project.PROJECT_ID.eq(project.projectId),
+            10000
+        )}
+
+        createWithAPI(project)
+
+        expect(
+            "we have observed the project creation",
+            observation.await() != null
+        )
+        expect(
+            "we have observed the correct project creation",
+            observation.await().projectId == project.projectId
+        )
+    }
+
+    suspend fun canObserveTeamCreateFromAnotherClient() = coroutineScope {
+        val team = Team.builder()
+            .teamId(UUID.randomUUID().toString())
+            .name("canObserveTeamCreateFromAnotherClient team")
+            .build()
+
+        val observation = async { waitForObservedRecord(
+            Team::class.java,
+            Team.TEAM_ID.eq(team.teamId),
+            10000
+        )}
+
+        createWithAPI(team)
+
+        expect(
+            "we have observed the team creation",
+            observation.await() != null
+        )
+        expect(
+            "we have observed the correct team creation",
+            observation.await().teamId == team.teamId
+        )
+    }
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_main)
@@ -1842,9 +1936,9 @@ class MainActivity : AppCompatActivity() {
 
             // if/when we need to test behavior on a clean local database.
             // and when we need NOT to, just comment these three lines out:
-            clear()
-            delay(5000)
-            Log.i("Verbose", "Data cleared")
+//            clear()
+//            delay(5000)
+//            Log.i("Verbose", "Data cleared")
 
             // Basics
             test("can create and retrieve a team with a project", ::canCreateAndRetrieve)
@@ -1904,6 +1998,11 @@ class MainActivity : AppCompatActivity() {
             test("can observeQuery a team create by project PK predicate", ::canObserveQueryTeamCreateByProjectPKPredicate)
             test("can observeQuery a team update by team FK", ::canObserveQueryTeamUpdateByFK, true)
             test("can observeQuery a team update by project PK predicate", ::canObserveQueryTeamUpdateByProjectPKPredicate)
+
+            test("can observe project creation from another client", ::canObserveProjectCreateFromAnotherClient)
+
+            // fails to create the mutation. not sure if this is expected right now.
+            test("can observe team creation from another client", ::canObserveTeamCreateFromAnotherClient, true)
 
             Log.i("Tutorial", "at the bottom of the launch")
         }
