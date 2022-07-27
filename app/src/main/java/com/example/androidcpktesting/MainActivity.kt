@@ -531,6 +531,33 @@ class MainActivity : AppCompatActivity() {
         )
     }
 
+    suspend fun canQueryProjectByClusterKeyAlone() {
+        // used to isolate entries from this test run.
+        val isolationKey = UUID.randomUUID().toString();
+
+        val saved = save(Project.builder()
+            .projectId(UUID.randomUUID().toString())
+            .name("project canQueryProjectByClusterKeyAlone ($isolationKey)")
+            .build()
+        )
+
+        val projects = list(
+            Project::class.java,
+            Where.matches(
+                Project.PROJECT_ID.eq(saved.projectId)
+            )
+        );
+
+        expect(
+            "There are exactly ONE matching projects",
+            projects.size == 1
+        )
+        expect(
+            "the returned item is the saved item",
+            projects.first().projectId == saved.projectId
+        )
+    }
+
     suspend fun canQueryProjectBySimplePredicate() {
         // used to isolate entries from this test run.
         val isolationKey = UUID.randomUUID().toString();
@@ -562,7 +589,7 @@ class MainActivity : AppCompatActivity() {
     suspend fun canDeleteProject() {
         val project = save(Project.builder()
             .projectId(UUID.randomUUID().toString())
-            .name("canDeleteProjectByTeamFK project")
+            .name("canDeleteProject project")
             .build()
         )
 
@@ -575,6 +602,26 @@ class MainActivity : AppCompatActivity() {
         val nothing = get(project);
         expect(
             "after deletion, the project can no longer be retrieved",
+            nothing == null
+        )
+    }
+
+    suspend fun canDeleteTeam() {
+        val team = save(Team.builder()
+            .teamId(UUID.randomUUID().toString())
+            .name("canDeleteTeam project")
+            .build()
+        )
+
+        val deleted = delete(team)
+        expect(
+            "deleted item is for the initial project",
+            deleted.teamId == team.teamId
+        )
+
+        val nothing = get(team);
+        expect(
+            "after deletion, the team can no longer be retrieved",
             nothing == null
         )
     }
@@ -905,6 +952,33 @@ class MainActivity : AppCompatActivity() {
         expect(
             "There are exactly $itemsToCreate matching teams (there may be more)",
             teams.size == itemsToCreate
+        )
+    }
+
+    suspend fun canQueryTeamByClusterKeyAlone() {
+        // used to isolate entries from this test run.
+        val isolationKey = UUID.randomUUID().toString();
+
+        val saved = save(Team.builder()
+            .teamId(UUID.randomUUID().toString())
+            .name("project canQueryTeamByClusterKeyAlone ($isolationKey)")
+            .build()
+        )
+
+        val teams = list(
+            Team::class.java,
+            Where.matches(
+                Team.TEAM_ID.eq(saved.teamId)
+            )
+        );
+
+        expect(
+            "There are exactly ONE matching projects",
+            teams.size == 1
+        )
+        expect(
+            "the returned item is the saved item",
+            teams.first().teamId == saved.teamId
         )
     }
 
@@ -1500,10 +1574,12 @@ class MainActivity : AppCompatActivity() {
             test("can create a project with a team", ::canCreateProjectWithTeam, true)
             test("can query for all created projects", ::canQueryAll)
             test("can delete a project", ::canDeleteProject)
+            test("can delete a team", ::canDeleteTeam)
 
             // Project
             test("can query for created projects by predicate", ::canQueryProjectBySimplePredicate)
             test("can query for created projects by FK fields", ::canQueryProjectByTeamFKPredicate)
+            test("can query for created projects by cluster key alone", ::canQueryProjectByClusterKeyAlone)
             test("can update created project FK fields", ::canUpdateProjectFKFields)
             test("can delete created project by FK fields", ::canDeleteProjectByTeamFK)
 
@@ -1518,6 +1594,7 @@ class MainActivity : AppCompatActivity() {
             test("can query for created teams by predicate", ::canQueryTeamBySimplePredicate)
             test("can query for created teams by FK fields", ::canQueryTeamByProjectFKPredicate, true)
             test("can query for created teams by project predicate with PK matcher", ::canQueryTeamByProjectPKPredicate)
+            test("can query for created teams by cluster key alone", ::canQueryTeamByClusterKeyAlone)
             test("can update created team FK fields", ::canUpdateTeamFKFields)
             test("can delete created team by FK fields", ::canDeleteTeamByTeamFK, true)
             test("can delete created team by project predicate with PK matcher", ::canDeleteTeamByProjectPKPredicate, true)
