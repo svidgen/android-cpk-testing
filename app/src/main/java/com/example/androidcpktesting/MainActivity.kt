@@ -1312,6 +1312,112 @@ class MainActivity : AppCompatActivity() {
         )
     }
 
+    suspend fun cannotCreateProjectWithBadTeam() = coroutineScope {
+        var thrown: Exception? = null
+
+        try {
+            val project = save(
+                Project.builder()
+                    .projectId(UUID.randomUUID().toString())
+                    .name("cannotCreateProjectWithBadTeam")
+                    .projectTeamTeamId(UUID.randomUUID().toString())
+                    .projectTeamName("cannotCreateProjectWithBadTeam non-existent team")
+                    .build()
+            )
+        } catch (error: Exception) {
+            thrown = error
+            Log.e("Verbose", "An exception was thrown as expected", error)
+        }
+
+        expect(
+            "An exception should have been thrown",
+            thrown != null
+        )
+    }
+
+    suspend fun cannotCreateTeamWithBadProject() = coroutineScope {
+        var thrown: Exception? = null
+
+        try {
+            val team = save(
+                Team.builder()
+                    .teamId(UUID.randomUUID().toString())
+                    .name("cannotCreateTeamWithBadProject")
+                    .project(
+                        Project.builder()
+                            .projectId(UUID.randomUUID().toString())
+                            .name("cannotCreateTeamWithBadProject doesn't exist in database")
+                            .build()
+                    )
+                    .build()
+            )
+        } catch (error: Exception) {
+            thrown = error
+            Log.e("Verbose", "An exception was thrown as expected", error)
+        }
+
+        expect(
+            "An exception should have been thrown",
+            thrown != null
+        )
+    }
+
+    suspend fun teamDeleteClearsProjectFK() = coroutineScope {
+        val team = save(Team.builder()
+            .teamId(UUID.randomUUID().toString())
+            .name("cannotQueryProjectWithBadTeam team")
+            .build()
+        )
+
+        val project = save(Project.builder()
+            .projectId(UUID.randomUUID().toString())
+            .name("cannotQueryProjectWithBadTeam project")
+            .projectTeamTeamId(team.teamId)
+            .projectTeamName(team.name)
+            .build()
+        )
+
+        delete(team)
+
+        val retrieved = get(project)
+        expect(
+            "I can still get the project from DataStore",
+            retrieved != null
+        )
+        expect(
+            "The retrieved project should no longer have team ID",
+            retrieved?.projectTeamTeamId == null || retrieved?.projectTeamTeamId == ""
+        )
+        expect(
+            "The retrieved project should no longer have team name",
+            retrieved?.projectTeamName == null || retrieved?.projectTeamName == ""
+        )
+    }
+
+    suspend fun projectDeleteCascadesToTeam() = coroutineScope {
+        val project = save(Project.builder()
+            .projectId(UUID.randomUUID().toString())
+            .name("projectDeleteClearsTeamFK project")
+            .build()
+        )
+
+        val team = save(Team.builder()
+            .teamId(UUID.randomUUID().toString())
+            .name("projectDeleteClearsTeamFK team")
+            .project(project)
+            .build()
+        )
+
+        delete(project)
+
+        val retrieved = get(team)
+
+        expect(
+            "The team is no longer present",
+            retrieved == null
+        )
+    }
+
     suspend fun observedTeamHasProjectAttached() = coroutineScope {
         val isolationKey = UUID.randomUUID().toString();
 
@@ -1734,9 +1840,10 @@ class MainActivity : AppCompatActivity() {
         GlobalScope.async {
             Log.i("Tutorial", "at the top of the launch")
 
-//            clear()
-//            delay(5000)
-
+            // if/when we need to test behavior on a clean local database.
+            // and when we need NOT to, just comment these three lines out:
+            clear()
+            delay(5000)
             Log.i("Verbose", "Data cleared")
 
             // Basics
@@ -1779,6 +1886,12 @@ class MainActivity : AppCompatActivity() {
             test("can delete created team by FK fields", ::canDeleteTeamByTeamFK, true)
             test("can delete created team by project predicate with PK matcher", ::canDeleteTeamByProjectPKPredicate, true)
             test("observed team's project is attached", ::observedTeamHasProjectAttached)
+
+            // consistency checks
+            test("cannot create a project pointing to non-existent team", ::cannotCreateProjectWithBadTeam)
+            test("cannot create a team pointing to a bad project", ::cannotCreateTeamWithBadProject)
+            test("deleting a team clears project FK", ::teamDeleteClearsProjectFK)
+            test("deleting a project deletes the team pointing to it", ::projectDeleteCascadesToTeam)
 
             // Team (belongsTo) predicate provides a `.PROJECT` matcher, so we only have two
             // test case for each of create,update + observe,observeQuery.
